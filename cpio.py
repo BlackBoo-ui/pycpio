@@ -86,6 +86,16 @@ class struct(_struct):
         super(struct, self).__init__()
 
     def pack(self, blob):
+        if isinstance(self, reg):
+            self.mode |= 0100000
+        elif isinstance(self, symlink):
+            self.mode |= 0120000
+        elif isinstance(self, cdev):
+            self.mode |= 0020000
+        elif isinstance(self, bdev):
+            self.mode |= 0060000
+        elif isinstance(self, dir):
+            self.mode |= 0040000
         fields = self.fields.values()
         fields.sort(key=lambda x: x._counter)
         for f in fields:
@@ -145,9 +155,7 @@ class _node(struct):
     NALIGN = struct.align()
 
     def __init__(self, path, **attributes):
-        if path.startswith('/'):
-            path = path[1:]
-        self.name = path
+        self.name = path.lstrip('/')
         self.namesize = len(self.name) + 1
         for k,v in attributes.iteritems():
             setattr(self, k, v)
@@ -176,9 +184,21 @@ class dev(_node):
         self.rdevminor = minor
         super(dev, self).__init__(path, **attributes)
 
+class cdev(dev):
+    def __init__(self, path, major, minor, **attributes):
+        super(cdev, self).__init__(path, major, minor, **attributes)
+
+class bdev(dev):
+    def __init__(self, path, major, minor, **attributes):
+        super(cdev, self).__init__(path, major, minor, **attributes)
+
 class nod(_node):
     def __init__(self, path, **attributes):
         super(nod, self).__init__(path, **attributes)
+
+class dir(_node):
+    def __init__(self, path, **attributes):
+        super(dir, self).__init__(path, **attributes)
 
 class reg(_node):
     DATA = struct.blob()
@@ -191,7 +211,7 @@ class reg(_node):
 
 class nodeMeta(type):
     def __call__(cls, root, path, *args, **kw):
-        fpath = os.path.join(root, path)
+        fpath = os.path.join(root, path.lstrip('/'))
         st = os.lstat(fpath)
         attrs = {}
         for a in ['mode', 'uid', 'gid', 'mtime']:
